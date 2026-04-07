@@ -2,7 +2,7 @@ import "~/styles/globals.css";
 
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
-
+import { SessionProvider } from "next-auth/react";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
@@ -20,9 +20,12 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geist.variable}`}>
+    // 在 html 標籤加上 suppressHydrationWarning
+    <html lang="en" className={`${geist.variable}`} suppressHydrationWarning>
       <body>
-        <TRPCReactProvider>{children}</TRPCReactProvider>
+        <SessionProvider>
+          <TRPCReactProvider>{children}</TRPCReactProvider>
+        </SessionProvider>
       </body>
     </html>
   );
