@@ -345,7 +345,15 @@ export default function HomePage() {
                       className="group relative w-24 h-24 rounded-full border-2 border-dashed border-gray-300 hover:border-indigo-400 flex items-center justify-center bg-gray-50 cursor-pointer overflow-hidden transition-all"
                     >
                       {avatarPreview ? (
-                        <img src={avatarPreview} alt="preview" className="w-full h-full object-cover group-hover:opacity-50 transition-opacity" />
+                        <img 
+                            src={
+                              m.user.avatar.startsWith("http") || m.user.avatar.startsWith("data:") 
+                                ? m.user.avatar 
+                                : `data:image/jpeg;base64,${m.user.avatar}`
+                            } 
+                            alt="avatar" 
+                            className="w-full h-full object-cover" 
+                          />
                       ) : (
                         <span className="text-gray-400 group-hover:text-indigo-500 transition-colors">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
