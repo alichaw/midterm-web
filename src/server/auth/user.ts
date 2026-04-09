@@ -14,7 +14,12 @@ cloudinary.config({
 export const userRouter = createTRPCRouter({
   // 註冊 (40分)
   register: publicProcedure
-    .input(z.object({ username: z.string().min(3), password: z.string().min(6) }))
+    .input(
+        z.object({ 
+          username: z.string().trim().min(3, "帳號至少需要 3 個非空白字元"), 
+          password: z.string().min(6, "密碼至少需要 6 個字元") 
+        })
+      )
     .mutation(async ({ input }) => {
       // 檢查帳號是否已存在 (避免重複註冊報錯)
       const existingUser = await db.user.findUnique({ where: { username: input.username } });
