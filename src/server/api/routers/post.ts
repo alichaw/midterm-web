@@ -1,26 +1,32 @@
+// src/server/api/routers/post.ts
 import { z } from "zod";
 import { env } from "~/env.js";
-
 import {
   createTRPCRouter,
   protectedProcedure,
   publicProcedure,
 } from "~/server/api/trpc";
+import { TRPCError } from "@trpc/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
-// 🛡️ 升級版圖片驗證邏輯：徹底阻擋 Path Traversal 與 SVG 攻擊
+const publicRateLimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(10, "10 s"),
+  analytics: true,
+  prefix: "ratelimit:public",
+});
+
+const strictCloudinaryPath = new RegExp(
+  `^/${env.CLOUDINARY_CLOUD_NAME}/image/upload/(?:v\\d+/)?[-_a-zA-Z0-9]+\\.(jpg|jpeg|png|webp|gif)$`,
+  "i"
+);
+
 const isSafeCloudinaryUrl = (url: string) => {
   try {
     const parsed = new URL(url);
-    
     if (parsed.hostname !== "res.cloudinary.com") return false;
-    
-    if (!parsed.pathname.startsWith(`/${env.CLOUDINARY_CLOUD_NAME}/image/upload/`)) return false;
-    
-    if (parsed.pathname.includes("..") || parsed.pathname.includes("./")) return false;
-    
-    if (!/\.(jpg|jpeg|png|webp|gif)$/i.test(parsed.pathname)) return false;
-    
-    return true;
+    return strictCloudinaryPath.test(parsed.pathname);
   } catch {
     return false;
   }
@@ -41,7 +47,17 @@ export const postRouter = createTRPCRouter({
     .input(z.object({ 
       text: z.string().max(100, "輸入長度過長，請限制在 100 字以內") 
     }))
-    .query(({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const ip = ctx.ip ?? "127.0.0.1";
+      const { success } = await publicRateLimit.limit(ip);
+      
+      if (!success) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "您的請求過於頻繁，請稍後再試。",
+        });
+      }
+
       return {
         greeting: `Hello ${escapeHtml(input.text)}`,
       };
@@ -56,11 +72,9 @@ export const postRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const sanitizedName = escapeHtml(input.name);
-
       return ctx.db.post.create({
         data: {
-          name: sanitizedName, 
+          name: input.name, 
           createdBy: { connect: { id: ctx.session.user.id } },
         },
       });
