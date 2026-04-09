@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
+import { TRPCError } from "@trpc/server";
 import { hash } from "bcryptjs";
 import { db } from "~/server/db";
 import { v2 as cloudinary } from "cloudinary";
-
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -11,19 +13,42 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+const base64ImageRegex = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/]+=*$/;
+
+const authRateLimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(3, "15 m"), 
+  analytics: true,
+  prefix: "ratelimit:auth",
+});
+
+const apiRateLimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(30, "10 s"), 
+  analytics: true,
+  prefix: "ratelimit:api",
+});
+
 export const userRouter = createTRPCRouter({
-  // 註冊 (40分)
+  
   register: publicProcedure
     .input(
         z.object({ 
-          username: z.string().trim().min(3, "帳號至少需要 3 個非空白字元"), 
-          password: z.string().min(6, "密碼至少需要 6 個字元") 
+          username: z.string().trim().min(3, "帳號至少需要 3 個非空白字元").max(20, "帳號最長 20 字"), 
+          password: z.string().min(6, "密碼至少需要 6 個字元").max(100, "密碼過長") 
         })
       )
-    .mutation(async ({ input }) => {
-      // 檢查帳號是否已存在 (避免重複註冊報錯)
+    .mutation(async ({ ctx, input }) => {
+      const ip = ctx.ip ?? "127.0.0.1";
+      const { success } = await authRateLimit.limit(ip);
+      if (!success) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "請求過於頻繁，請稍後再試。" });
+      }
+
       const existingUser = await db.user.findUnique({ where: { username: input.username } });
-      if (existingUser) throw new Error("此帳號已被註冊");
+      if (existingUser) {
+        throw new TRPCError({ code: "CONFLICT", message: "此帳號已被註冊" });
+      }
 
       const hashedPassword = await hash(input.password, 12);
       return db.user.create({
@@ -32,13 +57,15 @@ export const userRouter = createTRPCRouter({
     }),
 
   uploadAvatar: protectedProcedure
-    .input(z.object({ imageBase64: z.string() }))
+    .input(
+      z.object({ 
+        imageBase64: z.string().regex(base64ImageRegex, "僅支援正確編碼的 PNG, JPG, WEBP 格式圖片")
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       if (input.imageBase64.length > 4000000) {
-        throw new Error("圖片檔案過大，請選擇更小的圖片");
+        throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "圖片檔案過大，請選擇更小的圖片" });
       }
-
-      console.log("上傳前綴檢查:", input.imageBase64.substring(0, 50));
 
       try {
         const uploadResponse = await cloudinary.uploader.upload(
@@ -56,12 +83,12 @@ export const userRouter = createTRPCRouter({
         });
       } catch (error) {
         console.error("Cloudinary 上傳失敗:", error);
-        throw new Error("圖片上傳失敗，請稍後再試");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "圖片上傳失敗，請稍後再試" });
       }
     }),
 
   createMessage: protectedProcedure
-    .input(z.object({ content: z.string().min(1) }))
+    .input(z.object({ content: z.string().min(1, "留言不能為空").max(500, "留言請勿超過 500 字") }))
     .mutation(async ({ ctx, input }) => {
       return db.message.create({
         data: {
@@ -76,19 +103,27 @@ export const userRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const message = await db.message.findUnique({ where: { id: input.id } });
       if (!message) {
-        throw new Error("找不到該留言");
+        throw new TRPCError({ code: "NOT_FOUND", message: "找不到該留言" });
       }
+      
       if (message.userId !== ctx.session.user.id) {
-        throw new Error("無法刪除他人的留言");
+        throw new TRPCError({ code: "FORBIDDEN", message: "無法刪除他人的留言" });
       }
       return db.message.delete({ where: { id: input.id } });
     }),
 
-  getMessages: publicProcedure.query(async () => {
+  getMessages: publicProcedure.query(async ({ ctx }) => {
+    const ip = ctx.ip ?? "127.0.0.1";
+    const { success } = await apiRateLimit.limit(ip);
+    if (!success) {
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "請求過於頻繁，請稍後再試。" });
+    }
+
     return db.message.findMany({
+      take: 50, 
       orderBy: { createdAt: "desc" },
       include: {
-        user: { select: { id: true, username: true, avatar: true } },
+        user: { select: { username: true, avatar: true } },
       },
     });
   }),
