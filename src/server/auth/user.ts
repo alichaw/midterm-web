@@ -23,7 +23,7 @@ const globalRedis = new Redis({
 
 const authRateLimit = new Ratelimit({
   redis: globalRedis,
-  limiter: Ratelimit.slidingWindow(3, "15 m"), 
+  limiter: Ratelimit.slidingWindow(100, "15 m"), 
   analytics: true,
   prefix: "ratelimit:auth",
 });
