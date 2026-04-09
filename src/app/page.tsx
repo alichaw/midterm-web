@@ -154,7 +154,7 @@ export default function HomePage() {
           </div>
           <div className="text-center md:text-left flex-1">
             <h1 className="text-2xl font-extrabold text-gray-900 mb-2">
-              你好，我是網站主人 👋
+              你好，我是網站主人 👋 (testing)
             </h1>
             <p className="text-gray-600 leading-relaxed max-w-2xl">
               這是一個用於期中攻防演練的個人網站，歡迎來訪！我熱愛程式開發與資安研究。本站使用 Next.js + tRPC + Prisma 建構。大家可以自由註冊帳號、上傳頭貼，並在下方的留言板留下你的足跡。
