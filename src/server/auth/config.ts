@@ -2,6 +2,15 @@ import { type NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { db } from "~/server/db";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+const loginRateLimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(5, "15 m"),
+  analytics: true,
+  prefix: "ratelimit:login",
+});
 
 export const authConfig = {
   providers: [
@@ -12,25 +21,38 @@ export const authConfig = {
         password: { label: "密碼", type: "password" }
       },
       async authorize(credentials) {
+        const username = credentials.username as string;
+
+        const { success } = await loginRateLimit.limit(username);
+        if (!success) {
+          throw new Error("嘗試次數過多，帳號已被暫時鎖定，請 15 分鐘後再試。");
+        }
+
         const user = await db.user.findUnique({
-          where: { username: credentials.username as string },
+          where: { username },
         });
 
-        if (!user) throw new Error("找不到此使用者");
+        if (!user) {
+          throw new Error("帳號或密碼錯誤");
+        }
 
         const isValid = await compare(
           credentials.password as string,
           user.password
         );
 
-        if (!isValid) throw new Error("密碼錯誤");
+        if (!isValid) {
+          throw new Error("帳號或密碼錯誤");
+        }
 
-        // ✅ 修正：回傳符合 NextAuth User 格式的物件
-        return { id: user.id, name: user.username, email: user.email ?? "" };
+        return { 
+          id: user.id, 
+          name: user.username, 
+          image: user.avatar
+        };
       },
     }),
   ],
-  // ✅ 移除 adapter — JWT strategy 與 PrismaAdapter 同時用會衝突
   session: { strategy: "jwt" },
   callbacks: {
     jwt: ({ token, user }) => {
