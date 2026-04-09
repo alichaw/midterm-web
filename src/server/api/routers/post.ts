@@ -10,8 +10,14 @@ import { TRPCError } from "@trpc/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
+// 🛡️ 終極殺招：手動注入 env，絕對不讓 Next.js 優化掉
+const globalRedis = new Redis({
+  url: env.UPSTASH_REDIS_REST_URL,
+  token: env.UPSTASH_REDIS_REST_TOKEN,
+});
+
 const publicRateLimit = new Ratelimit({
-  redis: Redis.fromEnv(),
+  redis: globalRedis,
   limiter: Ratelimit.slidingWindow(10, "10 s"),
   analytics: true,
   prefix: "ratelimit:public",
