@@ -100,7 +100,7 @@ export default function HomePage() {
     setIsLoggingIn(true);
     try {
       const res = await signIn("credentials", {
-        username,
+        username: username.trim(),
         password,
         redirect: false, // 設為 false 以免跳轉，留在原頁面處理結果
       });
@@ -310,7 +310,7 @@ export default function HomePage() {
                         onKeyDown={(e) => {
                            if (e.key === "Enter") {
                              if (activeTab === "login") void handleLogin();
-                             else register.mutate({ username, password });
+                             else register.mutate({ username: username.trim(), password });
                            }
                         }}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
