@@ -1,12 +1,19 @@
+// config.ts
 import { type NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { db } from "~/server/db";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { env } from "~/env";
+
+const globalRedis = new Redis({
+  url: env.UPSTASH_REDIS_REST_URL,
+  token: env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 const loginRateLimit = new Ratelimit({
-  redis: Redis.fromEnv(),
+  redis: globalRedis, // ✅ 這裡改掉
   limiter: Ratelimit.slidingWindow(5, "15 m"),
   analytics: true,
   prefix: "ratelimit:login",

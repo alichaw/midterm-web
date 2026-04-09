@@ -7,10 +7,16 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 
+const globalRedis = new Redis({
+  url: env.UPSTASH_REDIS_REST_URL,
+  token: env.UPSTASH_REDIS_REST_TOKEN,
+});
+
 const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
+  redis: globalRedis,
   limiter: Ratelimit.slidingWindow(5, "1 m"),
   analytics: true,
+  prefix: "ratelimit:ai",
 });
 
 export const aiRouter = createTRPCRouter({
