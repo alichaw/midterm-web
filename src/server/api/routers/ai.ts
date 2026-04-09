@@ -6,7 +6,6 @@ import { TRPCError } from "@trpc/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-
 const globalRedis = new Redis({
   url: env.UPSTASH_REDIS_REST_URL,
   token: env.UPSTASH_REDIS_REST_TOKEN,
@@ -27,8 +26,9 @@ export const aiRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // 🛡️ 1. 執行 Per-User Rate Limiting
-      const { success } = await ratelimit.limit(ctx.session.user.id);
+      // 🛡️ 修補 1：加上驚嘆號 (!)，告訴 TypeScript「因為是 protectedProcedure，這裡絕對有 user id」
+      const { success } = await ratelimit.limit(ctx.session.user.id!);
+      
       if (!success) {
         throw new TRPCError({
           code: "TOO_MANY_REQUESTS",
@@ -38,12 +38,12 @@ export const aiRouter = createTRPCRouter({
 
       try {
         const response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-goog-api-key": env.GEMINI_API_KEY,
+              "x-goog-api-key": env.GEMINI_API_KEY ?? "", 
             },
             body: JSON.stringify({
               systemInstruction: {
@@ -53,7 +53,6 @@ export const aiRouter = createTRPCRouter({
                   }
                 ]
               },
-              // 使用者的輸入只會被當作單純的 user content，無法跳脫到 system 層級
               contents: [
                 {
                   role: "user",
@@ -75,7 +74,6 @@ export const aiRouter = createTRPCRouter({
           throw new Error("AI 產生了過長的異常內容");
         }
 
-        // 這裡直接回傳 result，交由 React 前端做 Escape 渲染
         return result;
 
       } catch (error) {
