@@ -6,24 +6,30 @@ import { db } from "~/server/db";
 import { v2 as cloudinary } from "cloudinary";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { env } from "~/env";
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  cloud_name: env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 const base64ImageRegex = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/]+=*$/;
 
+const globalRedis = new Redis({
+  url: env.UPSTASH_REDIS_REST_URL,
+  token: env.UPSTASH_REDIS_REST_TOKEN,
+});
+
 const authRateLimit = new Ratelimit({
-  redis: Redis.fromEnv(),
+  redis: globalRedis,
   limiter: Ratelimit.slidingWindow(3, "15 m"), 
   analytics: true,
   prefix: "ratelimit:auth",
 });
 
 const apiRateLimit = new Ratelimit({
-  redis: Redis.fromEnv(),
+  redis: globalRedis,
   limiter: Ratelimit.slidingWindow(30, "10 s"), 
   analytics: true,
   prefix: "ratelimit:api",
