@@ -39,9 +39,12 @@ export const userRouter = createTRPCRouter({
   
   register: publicProcedure
     .input(
-        z.object({ 
-          username: z.string().trim().min(3, "帳號至少需要 3 個非空白字元").max(20, "帳號最長 20 字"), 
-          password: z.string().min(6, "密碼至少需要 6 個字元").max(100, "密碼過長") 
+        z.object({
+          username: z.string().trim()
+            .min(3, "帳號至少需要 3 個非空白字元")
+            .max(20, "帳號最長 20 字")
+            .regex(/^[a-zA-Z0-9_]+$/, "帳號只能包含英文字母、數字與底線"),
+          password: z.string().min(6, "密碼至少需要 6 個字元").max(100, "密碼過長")
         })
       )
     .mutation(async ({ ctx, input }) => {
@@ -57,9 +60,10 @@ export const userRouter = createTRPCRouter({
       }
 
       const hashedPassword = await hash(input.password, 12);
-      return db.user.create({
+      const user = await db.user.create({
         data: { username: input.username, password: hashedPassword },
       });
+      return { id: user.id, username: user.username, avatar: user.avatar };
     }),
 
   uploadAvatar: protectedProcedure
@@ -83,10 +87,11 @@ export const userRouter = createTRPCRouter({
           }
         );
 
-        return db.user.update({
+        const updated = await db.user.update({
           where: { id: ctx.session.user.id },
           data: { avatar: uploadResponse.secure_url },
         });
+        return { id: updated.id, username: updated.username, avatar: updated.avatar };
       } catch (error) {
         console.error("Cloudinary 上傳失敗:", error);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "圖片上傳失敗，請稍後再試" });
@@ -94,12 +99,17 @@ export const userRouter = createTRPCRouter({
     }),
 
   createMessage: protectedProcedure
-    .input(z.object({ content: z.string().min(1, "留言不能為空").max(500, "留言請勿超過 500 字") }))
+    .input(z.object({
+      content: z.string()
+        .min(1, "留言不能為空")
+        .max(500, "留言請勿超過 500 字")
+        .refine((v) => !/<[^>]*>/g.test(v), "留言內容不允許 HTML 標籤"),
+    }))
     .mutation(async ({ ctx, input }) => {
       return db.message.create({
         data: {
           content: input.content,
-          userId: ctx.session.user.id,
+          userId: ctx.session.user.id!,
         },
       });
     }),
@@ -107,30 +117,37 @@ export const userRouter = createTRPCRouter({
   deleteMessage: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const message = await db.message.findUnique({ where: { id: input.id } });
-      if (!message) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "找不到該留言" });
+      // Atomic: only deletes when both id AND userId match, preventing TOCTOU and IDOR
+      const deleted = await db.message.deleteMany({
+        where: { id: input.id, userId: ctx.session.user.id! },
+      });
+      if (deleted.count === 0) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "找不到該留言或無權刪除" });
       }
-      
-      if (message.userId !== ctx.session.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "無法刪除他人的留言" });
-      }
-      return db.message.delete({ where: { id: input.id } });
     }),
 
-  getMessages: publicProcedure.query(async ({ ctx }) => {
+  getMessages: protectedProcedure.query(async ({ ctx }) => {
     const ip = ctx.ip ?? "127.0.0.1";
     const { success } = await apiRateLimit.limit(ip);
     if (!success) {
       throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "請求過於頻繁，請稍後再試。" });
     }
 
-    return db.message.findMany({
-      take: 50, 
+    const messages = await db.message.findMany({
+      take: 50,
       orderBy: { createdAt: "desc" },
       include: {
         user: { select: { username: true, avatar: true } },
       },
     });
+
+    return messages.map((m) => ({
+      ...m,
+      user: {
+        ...m.user,
+        // Only pass through verified Cloudinary URLs; drop any data: / blob: / legacy values
+        avatar: m.user.avatar?.startsWith("https://res.cloudinary.com/") ? m.user.avatar : null,
+      },
+    }));
   }),
 });

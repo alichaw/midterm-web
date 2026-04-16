@@ -205,14 +205,14 @@ export default function HomePage() {
                   <div key={m.id} className="flex gap-4 items-start p-4 hover:bg-gray-50 rounded-xl transition-colors group">
                     <div className="w-10 h-10 rounded-full bg-indigo-100 border border-gray-200 flex shrink-0 items-center justify-center overflow-hidden">
                       {m.user?.avatar ? (
-                        <img 
+                        <img
                           src={
-                            m.user.avatar.startsWith("http") || m.user.avatar.startsWith("data:") 
-                              ? m.user.avatar 
-                              : `data:image/jpeg;base64,${m.user.avatar}`
-                          } 
-                          alt="avatar" 
-                          className="w-full h-full object-cover" 
+                            m.user.avatar.startsWith("https://res.cloudinary.com/")
+                              ? m.user.avatar
+                              : undefined
+                          }
+                          alt="avatar"
+                          className="w-full h-full object-cover"
                         />
                       ) : (
                         <span className="text-lg">👤</span>

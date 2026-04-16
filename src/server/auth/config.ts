@@ -12,11 +12,20 @@ const globalRedis = new Redis({
   token: env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const loginRateLimit = new Ratelimit({
-  redis: globalRedis, // ✅ 這裡改掉
+// Per-username: 防暴力破解單一帳號
+const loginUserRateLimit = new Ratelimit({
+  redis: globalRedis,
   limiter: Ratelimit.slidingWindow(5, "15 m"),
   analytics: true,
-  prefix: "ratelimit:login",
+  prefix: "ratelimit:login:user",
+});
+
+// Per-IP: 防 password spraying / 帳號鎖定 DoS
+const loginIpRateLimit = new Ratelimit({
+  redis: globalRedis,
+  limiter: Ratelimit.slidingWindow(20, "15 m"),
+  analytics: true,
+  prefix: "ratelimit:login:ip",
 });
 
 export const authConfig = {
@@ -27,11 +36,26 @@ export const authConfig = {
         username: { label: "帳號", type: "text" },
         password: { label: "密碼", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const username = credentials.username as string;
 
-        const { success } = await loginRateLimit.limit(username);
-        if (!success) {
+        // IP: prefer x-real-ip (set by Vercel), fall back to last x-forwarded-for entry
+        const realIp = request?.headers?.get("x-real-ip");
+        const forwarded = request?.headers?.get("x-forwarded-for");
+        const ip =
+          realIp?.trim() ??
+          forwarded?.split(",").at(-1)?.trim() ??
+          "127.0.0.1";
+
+        // 1) Per-IP check first — blocks DoS / password spraying without locking real users
+        const { success: ipOk } = await loginIpRateLimit.limit(ip);
+        if (!ipOk) {
+          throw new Error("此 IP 的嘗試次數過多，請稍後再試。");
+        }
+
+        // 2) Per-username check — locks a specific account after 5 wrong attempts
+        const { success: userOk } = await loginUserRateLimit.limit(username);
+        if (!userOk) {
           throw new Error("嘗試次數過多，帳號已被暫時鎖定，請 15 分鐘後再試。");
         }
 

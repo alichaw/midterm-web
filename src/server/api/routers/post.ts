@@ -95,10 +95,11 @@ export const postRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.user.update({
+      const updated = await ctx.db.user.update({
         where: { id: ctx.session.user.id },
         data: { image: input.imageUrl },
       });
+      return { id: updated.id, username: updated.username, image: updated.image };
     }),
 
   getLatest: protectedProcedure.query(async ({ ctx }) => {

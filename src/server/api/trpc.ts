@@ -10,12 +10,15 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 
   const realIp = opts.headers.get("x-real-ip");
   const forwardedFor = opts.headers.get("x-forwarded-for");
-  
+
+  // x-real-ip is set by Vercel's edge and cannot be spoofed by clients.
+  // x-forwarded-for: take the LAST entry — that is the address appended by the
+  // trusted reverse proxy, not the first (which a client can freely inject).
   let ip = "127.0.0.1";
   if (realIp) {
     ip = realIp.trim();
   } else if (forwardedFor) {
-    ip = forwardedFor.split(",")[0]?.trim() ?? "127.0.0.1";
+    ip = forwardedFor.split(",").at(-1)?.trim() ?? "127.0.0.1";
   }
 
   return {
