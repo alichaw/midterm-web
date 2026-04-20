@@ -154,10 +154,10 @@ export default function HomePage() {
           </div>
           <div className="text-center md:text-left flex-1">
             <h1 className="text-2xl font-extrabold text-gray-900 mb-2">
-              你好，我是網站主人 👋 (testing)
+              你好，我是陳躍心👋
             </h1>
             <p className="text-gray-600 leading-relaxed max-w-2xl">
-              這是一個用於期中攻防演練的個人網站，歡迎來訪！我熱愛程式開發與資安研究。本站使用 Next.js + tRPC + Prisma 建構。大家可以自由註冊帳號、上傳頭貼，並在下方的留言板留下你的足跡。
+              這是一個用於期中攻防演練的個人網站，歡迎來訪！工程科學及海洋工程學系碩一，興趣是寫程式。
             </p>
           </div>
         </section>
@@ -244,7 +244,7 @@ export default function HomePage() {
               <h2 className="text-lg font-bold text-indigo-900 mb-2 flex items-center gap-2">
                 ✨ AI 小幫手：文字改寫
               </h2>
-              <p className="text-indigo-700/80 text-sm mb-4">輸入草稿，讓 Claude AI 幫你修飾得更通順生動。</p>
+              <p className="text-indigo-700/80 text-sm mb-4">輸入草稿，讓 AI 幫你修飾得更通順生動。</p>
               <textarea
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
