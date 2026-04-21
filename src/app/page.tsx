@@ -157,7 +157,7 @@ export default function HomePage() {
               你好，我是陳躍心👋
             </h1>
             <p className="text-gray-600 leading-relaxed max-w-2xl">
-              這是一個用於期中攻防演練的個人網站，歡迎來訪！工程科學及海洋工程學系碩一，興趣是寫程式。
+              這是一個用於期中攻防演練的個人網站，歡迎來訪！R14525125，興趣是寫程式，看棒球。拜託同學下手輕一點。>-<
             </p>
           </div>
         </section>
